@@ -1,12 +1,10 @@
+use crate::theme::Palette;
 use eframe::egui::{
     self, pos2, vec2, Align2, Area, Color32, CursorIcon, FontId, Id, Key, Order, Rect, RichText,
     ScrollArea, Sense, Shape, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, WidgetInfo, WidgetType,
 };
 
 const OPEN_PROMPT: &str = "让 agent 做点什么";
-const SURFACE: Color32 = Color32::from_gray(36);
-const SECONDARY: Color32 = Color32::from_gray(179);
-const MUTED: Color32 = Color32::from_gray(137);
 
 #[derive(Default)]
 pub struct Composer {
@@ -42,17 +40,19 @@ impl Composer {
             .sense(Sense::hover())
             .show(ctx, |ui| {
                 let (bounds, _) = ui.allocate_exact_size(size, Sense::hover());
+                let palette = Palette::from_visuals(ui.visuals());
+                let shadow_alpha = if ui.visuals().dark_mode { 72 } else { 28 };
                 let radius = if self.expanded { 14 } else { 19 };
                 let shadow = egui::epaint::Shadow {
                     offset: [0, 5],
                     blur: 20,
                     spread: 0,
-                    color: Color32::from_black_alpha(72),
+                    color: Color32::from_black_alpha(shadow_alpha),
                 };
                 ui.painter().add(shadow.as_shape(bounds, radius));
                 if self.expanded {
-                    self.edit(ui, bounds, editor);
-                } else if pill(ui, bounds) {
+                    self.edit(ui, bounds, editor, palette);
+                } else if pill(ui, bounds, palette) {
                     self.expanded = true;
                     self.focus_draft = true;
                     ctx.request_repaint();
@@ -61,8 +61,8 @@ impl Composer {
         top_left.y
     }
 
-    fn edit(&mut self, ui: &mut Ui, bounds: Rect, editor: Id) {
-        ui.painter().rect_filled(bounds, 14, SURFACE);
+    fn edit(&mut self, ui: &mut Ui, bounds: Rect, editor: Id, palette: Palette) {
+        ui.painter().rect_filled(bounds, 14, palette.surface);
         let handle = Rect::from_center_size(
             pos2(bounds.center().x, bounds.top() + 12.0),
             vec2(80.0, 24.0),
@@ -70,9 +70,9 @@ impl Composer {
         let collapse = ui.interact(handle, ui.id().with("collapse"), Sense::click());
         collapse.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, "收起输入框"));
         let handle_ink = if collapse.hovered() || collapse.has_focus() {
-            MUTED
+            palette.muted
         } else {
-            Color32::from_gray(62)
+            palette.border.lerp_to_gamma(palette.muted, 0.2)
         };
         ui.painter().rect_filled(
             Rect::from_center_size(handle.center(), vec2(32.0, 4.0)),
@@ -94,7 +94,7 @@ impl Composer {
         ui.painter().rect_stroke(
             field,
             14,
-            Stroke::new(1.0_f32, Color32::from_gray(43)),
+            Stroke::new(1.0_f32, palette.border),
             StrokeKind::Inside,
         );
         let text = Rect::from_min_max(
@@ -118,30 +118,35 @@ impl Composer {
                             .desired_rows(2)
                             .desired_width(ui.available_width())
                             .font(FontId::proportional(13.0))
-                            .text_color(Color32::from_gray(222))
-                            .hint_text(RichText::new("说说想改什么").color(MUTED)),
+                            .text_color(palette.text)
+                            .hint_text(RichText::new("说说想改什么").color(palette.muted)),
                     );
                 });
         });
-        draw_footer(ui, bounds, field);
+        draw_footer(ui, bounds, field, palette);
     }
 }
 
-fn pill(ui: &mut Ui, rect: Rect) -> bool {
+fn pill(ui: &mut Ui, rect: Rect, palette: Palette) -> bool {
     let button = ui.interact(rect, ui.id().with("expand"), Sense::click());
     button.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, OPEN_PROMPT));
     let fill = if button.hovered() {
-        Color32::from_gray(44)
+        palette.hover
     } else {
-        SURFACE
+        palette.surface
     };
     let painter = ui.painter();
     painter.rect_filled(rect, 19, fill);
     if button.has_focus() {
-        painter.rect_stroke(rect, 19, Stroke::new(1.0_f32, MUTED), StrokeKind::Inside);
+        painter.rect_stroke(
+            rect,
+            19,
+            Stroke::new(1.0_f32, palette.focus),
+            StrokeKind::Inside,
+        );
     }
     let icon = rect.left_center() + vec2(24.0, 0.0);
-    let stroke = Stroke::new(1.0_f32, SECONDARY);
+    let stroke = Stroke::new(1.0_f32, palette.secondary);
     painter.rect_stroke(
         Rect::from_center_size(icon, vec2(13.0, 12.0)),
         5,
@@ -157,21 +162,25 @@ fn pill(ui: &mut Ui, rect: Rect) -> bool {
         Align2::LEFT_CENTER,
         OPEN_PROMPT,
         FontId::proportional(13.0),
-        Color32::from_gray(208),
+        palette.text,
     );
     button.on_hover_cursor(CursorIcon::PointingHand).clicked()
 }
 
-fn draw_footer(ui: &mut Ui, bounds: Rect, field: Rect) {
+fn draw_footer(ui: &mut Ui, bounds: Rect, field: Rect, palette: Palette) {
     let painter = ui.painter();
-    let stroke = Stroke::new(1.2_f32, MUTED);
+    let stroke = Stroke::new(1.2_f32, palette.muted);
     let row_y = field.bottom() - 29.0;
     let add = pos2(field.left() + 29.0, row_y);
     painter.line_segment([add - vec2(5.5, 0.0), add + vec2(5.5, 0.0)], stroke);
     painter.line_segment([add - vec2(0.0, 5.5), add + vec2(0.0, 5.5)], stroke);
     let send = pos2(field.right() - 28.0, row_y);
-    painter.circle_filled(send, 15.0, Color32::from_gray(108));
-    let arrow = Stroke::new(1.2_f32, SURFACE);
+    painter.circle_filled(
+        send,
+        15.0,
+        palette.surface.lerp_to_gamma(palette.muted, 0.7),
+    );
+    let arrow = Stroke::new(1.2_f32, palette.surface);
     painter.line_segment([send + vec2(0.0, 4.0), send - vec2(0.0, 4.0)], arrow);
     painter.add(Shape::line(
         vec![
@@ -195,16 +204,20 @@ fn draw_footer(ui: &mut Ui, bounds: Rect, field: Rect) {
         Align2::RIGHT_CENTER,
         "未连接模型",
         FontId::proportional(12.0),
-        MUTED,
+        palette.muted,
     );
     let quota = pos2(bounds.center().x - 13.0, bounds.bottom() - 20.0);
-    painter.circle_stroke(quota, 5.2, Stroke::new(1.6_f32, Color32::from_gray(70)));
+    painter.circle_stroke(
+        quota,
+        5.2,
+        Stroke::new(1.6_f32, palette.border.lerp_to_gamma(palette.muted, 0.3)),
+    );
     painter.text(
         quota + vec2(10.0, 0.0),
         Align2::LEFT_CENTER,
         "额度",
         FontId::proportional(11.0),
-        MUTED,
+        palette.muted,
     );
     ui.interact(
         Rect::from_center_size(add, vec2(30.0, 30.0)),

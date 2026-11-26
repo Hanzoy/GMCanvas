@@ -2,7 +2,9 @@
 
 mod composer;
 mod controls;
+mod logo;
 mod shell;
+mod theme;
 mod viewport;
 
 use controls::Action;
@@ -15,10 +17,7 @@ use viewport::Viewport;
 fn main() -> eframe::Result {
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png"))
         .expect("bundled canvas icon");
-    let logo = egui::ColorImage::from_rgba_unmultiplied(
-        [icon.width as usize, icon.height as usize],
-        &icon.rgba,
-    );
+    let logo = logo::SidebarLogo::new(&icon);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(false)
@@ -31,13 +30,10 @@ fn main() -> eframe::Result {
         "GMCanvas",
         options,
         Box::new(move |cc| {
-            cc.egui_ctx.set_theme(egui::Theme::Dark);
             cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
             load_ui_font(&cc.egui_ctx);
             Ok(Box::new(CanvasApp {
-                logo: cc
-                    .egui_ctx
-                    .load_texture("gmcanvas_logo", logo, egui::TextureOptions::LINEAR),
+                logo,
                 home_open: false,
                 view: Viewport::default(),
                 hand: false,
@@ -71,7 +67,7 @@ fn load_ui_font(ctx: &egui::Context) {
 }
 
 struct CanvasApp {
-    logo: egui::TextureHandle,
+    logo: logo::SidebarLogo,
     home_open: bool,
     view: Viewport,
     hand: bool,
@@ -171,7 +167,7 @@ impl eframe::App for CanvasApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
-                let board = shell::workspace(ui, self.logo.id(), &mut self.home_open);
+                let board = shell::workspace(ui, self.logo.texture(ctx), &mut self.home_open);
                 if self.home_open {
                     if shell::home(ui, board).clicked() {
                         self.home_open = false;

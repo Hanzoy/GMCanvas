@@ -1,3 +1,4 @@
+use crate::theme::Palette;
 use eframe::egui::{
     self, pos2, vec2, Align2, Area, Color32, CursorIcon, FontId, Frame, Order, Painter, Pos2, Rect,
     Response, Sense, Shape, Stroke, StrokeKind, Ui, WidgetInfo, WidgetType,
@@ -35,28 +36,37 @@ pub fn show(
         };
         (Align2::LEFT_BOTTOM, pos2(rect.left() + 14.0, y))
     };
-    capsule(ctx, "canvas_zoom", rect, zoom_corner, zoom_pos, |ui| {
-        for action in [ZoomOut, ResetZoom, ZoomIn] {
-            let enabled = match action {
-                ZoomOut => zoom > 0.1,
-                ZoomIn => zoom < 2.0,
-                _ => true,
-            };
-            if ui
-                .add_enabled(enabled, |ui: &mut Ui| control(ui, action, zoom, hand))
-                .clicked()
-            {
-                clicked = Some(action);
+    capsule(
+        ctx,
+        "canvas_zoom",
+        rect,
+        zoom_corner,
+        zoom_pos,
+        |ui, palette| {
+            for action in [ZoomOut, ResetZoom, ZoomIn] {
+                let enabled = match action {
+                    ZoomOut => zoom > 0.1,
+                    ZoomIn => zoom < 2.0,
+                    _ => true,
+                };
+                if ui
+                    .add_enabled(enabled, |ui: &mut Ui| {
+                        control(ui, action, zoom, hand, palette)
+                    })
+                    .clicked()
+                {
+                    clicked = Some(action);
+                }
             }
-        }
-    });
+        },
+    );
     capsule(
         ctx,
         "canvas_tools",
         rect,
         Align2::CENTER_BOTTOM,
         pos2(rect.center().x, tools_y),
-        |ui| {
+        |ui, palette| {
             for (label, is_asset) in [("添加节点（后续开放）", false), ("素材（后续开放）", true)]
             {
                 ui.add_enabled(false, |ui: &mut Ui| {
@@ -64,7 +74,7 @@ pub fn show(
                         ui.allocate_exact_size(vec2(30.0, 30.0), Sense::click());
                     response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, false, label));
                     let center = box_rect.center();
-                    let stroke = Stroke::new(1.35_f32, Color32::from_gray(223));
+                    let stroke = Stroke::new(1.35_f32, palette.text);
                     let painter = ui.painter();
                     if is_asset {
                         painter.rect_stroke(
@@ -103,7 +113,7 @@ pub fn show(
                 .on_disabled_hover_text(label);
             }
             for action in [Select, Hand, Home] {
-                if control(ui, action, zoom, hand).clicked() {
+                if control(ui, action, zoom, hand, palette).clicked() {
                     clicked = Some(action);
                 }
             }
@@ -118,7 +128,7 @@ fn capsule(
     rect: Rect,
     pivot: Align2,
     position: Pos2,
-    buttons: impl FnOnce(&mut Ui),
+    buttons: impl FnOnce(&mut Ui, Palette),
 ) {
     Area::new(id.into())
         .order(Order::Foreground)
@@ -128,24 +138,26 @@ fn capsule(
         .fixed_pos(position)
         .default_size(egui::Vec2::ZERO)
         .show(ctx, |ui| {
+            let palette = Palette::from_visuals(ui.visuals());
+            let shadow_alpha = if ui.visuals().dark_mode { 62 } else { 24 };
             Frame::NONE
                 .inner_margin(5)
                 .corner_radius(12)
-                .fill(Color32::from_gray(36))
+                .fill(palette.surface)
                 .shadow(egui::epaint::Shadow {
                     offset: [0, 5],
                     blur: 16,
                     spread: 0,
-                    color: Color32::from_black_alpha(62),
+                    color: Color32::from_black_alpha(shadow_alpha),
                 })
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
-                    ui.horizontal(buttons);
+                    ui.horizontal(|ui| buttons(ui, palette));
                 });
         });
 }
 
-fn control(ui: &mut Ui, action: Action, zoom: f64, hand: bool) -> Response {
+fn control(ui: &mut Ui, action: Action, zoom: f64, hand: bool, palette: Palette) -> Response {
     use Action::*;
 
     let label = match action {
@@ -171,22 +183,22 @@ fn control(ui: &mut Ui, action: Action, zoom: f64, hand: bool) -> Response {
 
     let painter = ui.painter();
     if selected || response.is_pointer_button_down_on() {
-        painter.rect_filled(rect, 8, Color32::from_gray(48));
+        painter.rect_filled(rect, 8, palette.selected);
     } else if response.hovered() {
-        painter.rect_filled(rect, 8, Color32::from_gray(42));
+        painter.rect_filled(rect, 8, palette.hover);
     }
     if response.has_focus() {
         painter.rect_stroke(
             rect,
             8,
-            Stroke::new(1.25_f32, Color32::from_gray(185)),
+            Stroke::new(1.25_f32, palette.focus),
             StrokeKind::Inside,
         );
     }
     let ink = if selected || response.hovered() {
-        Color32::from_gray(236)
+        palette.text
     } else {
-        Color32::from_gray(163)
+        palette.secondary
     };
     if action == ResetZoom {
         painter.text(

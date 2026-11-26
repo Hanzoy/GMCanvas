@@ -1,10 +1,9 @@
+use crate::theme::Palette;
 use eframe::egui::{
-    emath::GuiRounding, epaint::Mesh, pos2, Color32, CornerRadius, Painter, Pos2, Rect, Vec2,
+    emath::GuiRounding, epaint::Mesh, pos2, CornerRadius, Painter, Pos2, Rect, Vec2,
 };
 
 const GRID_STEP: f64 = 24.0;
-const CANVAS: Color32 = Color32::from_gray(24);
-const GRID_DOT: Color32 = Color32::from_gray(51);
 
 pub struct Viewport {
     center: [f64; 2],
@@ -42,6 +41,7 @@ impl Viewport {
 
     pub fn paint(&self, painter: &Painter, rect: Rect) {
         let painter = painter.with_clip_rect(rect);
+        let palette = Palette::from_visuals(&painter.ctx().style().visuals);
         painter.rect_filled(
             rect,
             CornerRadius {
@@ -50,7 +50,7 @@ impl Viewport {
                 sw: 9,
                 se: 9,
             },
-            CANVAS,
+            palette.canvas,
         );
 
         let origin_x = f64::from(rect.center().x) - self.center[0] * self.zoom;
@@ -64,14 +64,15 @@ impl Viewport {
         let left = f64::from(rect.left());
         let top = f64::from(rect.top());
         let first_x = left + (origin_x - left).rem_euclid(spacing);
+        let pixels_per_point = painter.pixels_per_point();
         let mut y = top + (origin_y - top).rem_euclid(spacing);
         let mut dots = Mesh::default();
         while y <= f64::from(rect.bottom()) {
             let mut x = first_x;
             while x <= f64::from(rect.right()) {
-                let pixel = pos2(x as f32, y as f32).round_to_pixels(painter.pixels_per_point());
+                let pixel = pos2(x as f32, y as f32).round_to_pixels(pixels_per_point);
                 let dot = Rect::from_min_size(pixel, Vec2::splat(1.0));
-                dots.add_colored_rect(dot, GRID_DOT);
+                dots.add_colored_rect(dot, palette.grid);
                 x += spacing;
             }
             y += spacing;
